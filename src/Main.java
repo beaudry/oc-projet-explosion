@@ -1,12 +1,15 @@
 import org.chocosolver.solver.Model;
+import org.chocosolver.solver.Solution;
+import org.chocosolver.solver.Solver;
 import org.chocosolver.solver.variables.BoolVar;
 import org.chocosolver.solver.variables.IntVar;
 
-import java.lang.reflect.Array;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class Main {
     private static final String PARAMETER_SEPARATOR = " ";
@@ -27,13 +30,13 @@ public class Main {
 
     static class Match {
         final IntVar id;
-        final Team[] teams;
+        final IntVar[] teamsIds;
         final BoolVar isShownOnTv;
 
-        public Match(IntVar id, BoolVar isShownOnTv, Team ...teams) {
+        public Match(IntVar id, BoolVar isShownOnTv, IntVar[] teamsIds) {
             this.id = id;
             this.isShownOnTv = isShownOnTv;
-            this.teams = teams;
+            this.teamsIds = teamsIds;
         }
     }
 
@@ -44,7 +47,7 @@ public class Main {
             List<String> lines = Files.readAllLines(Paths.get(args[0]));
 
             int MATCHES_PER_DAY = Integer.valueOf(lines.get(0));
-            Team[] teams = new Team[lines.size()-1];
+            Team[] teams = new Team[lines.size() - 1];
             String[] teamParameters;
             int teamIndex;
 
@@ -59,49 +62,46 @@ public class Main {
                 );
             }
 
+
             Match[] matches = new Match[teams.length / TEAMS_PER_MATCH];
             for (int matchIndex = 0; matchIndex < matches.length; matchIndex++) {
                 matches[matchIndex] = new Match(
                         model.intVar(matchIndex + 1),
                         model.boolVar(),
-                        Arrays.copyOfRange(teams, matchIndex * TEAMS_PER_MATCH, (matchIndex + 1) * TEAMS_PER_MATCH - 1)
+                        model.intVarArray(TEAMS_PER_MATCH, 0, teams.length)
                 );
             }
 
-            Match[][] calendar = new Match[matches.length / MATCHES_PER_DAY][MATCHES_PER_DAY];
+            IntVar[][] calendar = new IntVar[matches.length / MATCHES_PER_DAY][MATCHES_PER_DAY];
             for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
-                calendar[dayNumber] = Arrays.copyOfRange(matches, dayNumber * MATCHES_PER_DAY, (dayNumber + 1) * MATCHES_PER_DAY - 1);
+                calendar[dayNumber] = model.intVarArray(MATCHES_PER_DAY, 0, matches.length);
             }
 
             // AllDiff pour avoir des équipes différentes à chaque match
+            
 
             // AllDiff pour avoir des matchs différents à chaque jour d'une semaine
 
-            int numberOfWeeks = (matches.length / MATCHES_PER_DAY)/7;
-            IntVar[][] matchesIndex = new IntVar[numberOfWeeks][7*MATCHES_PER_DAY];
-            for(int k = 0; k < numberOfWeeks; k++)
-            {
-                for (int i = 0; i < (7*MATCHES_PER_DAY); i++)
-                {
-                    for (int j = 0; j < MATCHES_PER_DAY; j++)
-                    {
-                        matchesIndex[k][i*MATCHES_PER_DAY + j] = calendar[i][j].id;
-                    }
+            IntVar[] flatCalendar = new IntVar[matches.length];
+            for (int i = 0; i < calendar.length; i++) {
+                for (int j = 0; j < calendar[i].length; j++) {
+                    flatCalendar[i * calendar[i].length + j] = calendar[i][j];
                 }
             }
-            IntVar[] extraWeekMatchesIndex = new IntVar[((matches.length/MATCHES_PER_DAY)%7)*MATCHES_PER_DAY];
-            for (int i = 0; i < (((matches.length/MATCHES_PER_DAY)%7)*MATCHES_PER_DAY); i++)
-            {
-                for (int j = 0; j < MATCHES_PER_DAY; j++)
-                {
-                    extraWeekMatchesIndex[i*MATCHES_PER_DAY + j] = calendar[i+(numberOfWeeks*7)][j].id;
+            model.allDifferent(flatCalendar).post();
+
+            Solver solver = model.getSolver();
+            Solution solution = solver.findSolution();
+
+            for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
+                System.out.printf("Jour %d: ", dayNumber + 1);
+                for (IntVar matchId : calendar[dayNumber]) {
+                    int realMatchId = solution.getIntVal(matchId);
+                    System.out.printf("Match #%s (%s), ", realMatchId, String.join(" vs ", Arrays.stream(matches[realMatchId].teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
                 }
+
+                System.out.println();
             }
-            for (int i = 0; i < numberOfWeeks; i++)
-            {
-                model.allDifferent(matchesIndex[i]).post();
-            }
-            model.allDifferent(extraWeekMatchesIndex).post();
 
 
         } catch (java.io.IOException exception) {
