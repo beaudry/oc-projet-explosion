@@ -1,15 +1,15 @@
 import org.chocosolver.solver.Model;
 import org.chocosolver.solver.Solution;
 import org.chocosolver.solver.Solver;
+import org.chocosolver.solver.constraints.Constraint;
+import org.chocosolver.solver.search.limits.FailCounter;
 import org.chocosolver.solver.variables.BoolVar;
 import org.chocosolver.solver.variables.IntVar;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class Main {
     private static final String PARAMETER_SEPARATOR = " ";
@@ -29,11 +29,11 @@ public class Main {
     }
 
     static class Match {
-        final IntVar id;
+        final int id;
         final IntVar[] teamsIds;
         final BoolVar isShownOnTv;
 
-        public Match(IntVar id, BoolVar isShownOnTv, IntVar[] teamsIds) {
+        public Match(int id, BoolVar isShownOnTv, IntVar[] teamsIds) {
             this.id = id;
             this.isShownOnTv = isShownOnTv;
             this.teamsIds = teamsIds;
@@ -49,11 +49,10 @@ public class Main {
             int MATCHES_PER_DAY = Integer.valueOf(lines.get(0));
             Team[] teams = new Team[lines.size() - 1];
             String[] teamParameters;
-            int teamIndex;
 
             for (int lineNumber = LINE_NUMBER_TEAMS_START; lineNumber < lines.size(); lineNumber++) {
                 teamParameters = lines.get(lineNumber).split(PARAMETER_SEPARATOR);
-                teamIndex = lineNumber - LINE_NUMBER_TEAMS_START;
+                int teamIndex = lineNumber - LINE_NUMBER_TEAMS_START;
 
                 teams[teamIndex] = new Team(
                         model.intVar(teamIndex + 1),
@@ -66,7 +65,7 @@ public class Main {
             Match[] matches = new Match[teams.length / TEAMS_PER_MATCH];
             for (int matchIndex = 0; matchIndex < matches.length; matchIndex++) {
                 matches[matchIndex] = new Match(
-                        model.intVar(matchIndex + 1),
+                        matchIndex + 1,
                         model.boolVar(),
                         model.intVarArray(TEAMS_PER_MATCH, 0, teams.length)
                 );
@@ -77,11 +76,25 @@ public class Main {
                 calendar[dayNumber] = model.intVarArray(MATCHES_PER_DAY, 0, matches.length);
             }
 
-            // AllDiff pour avoir des équipes différentes à chaque match
-            
+            // Avoir des équipes différentes à chaque match (et triées)
+            for (Match match : matches) {
 
-            // AllDiff pour avoir des matchs différents à chaque jour d'une semaine
+                for (int teamNumber = 0; teamNumber < match.teamsIds.length - 1; teamNumber++) {
+                    model.arithm(match.teamsIds[teamNumber], "<", match.teamsIds[teamNumber + 1]).post();
+                }
 
+                for (Match otherMatch : matches) {
+                    if (match != otherMatch) {
+                        Constraint[] differents = new Constraint[match.teamsIds.length];
+                        for (int teamIndex = 0; teamIndex < match.teamsIds.length; teamIndex++) {
+                            differents[teamIndex] = model.allDifferent(match.teamsIds[teamIndex], otherMatch.teamsIds[teamIndex]);
+                        }
+                        model.or(differents).post();
+                    }
+                }
+            }
+
+            // Chaque match ne se produit qu'une seule fois dans la session.
             IntVar[] flatCalendar = new IntVar[matches.length];
             for (int i = 0; i < calendar.length; i++) {
                 for (int j = 0; j < calendar[i].length; j++) {
@@ -90,18 +103,36 @@ public class Main {
             }
             model.allDifferent(flatCalendar).post();
 
+            // TODO: Chaque équipe joue le même nombre de match (ce nombre est variable et sera le deuxième argument de la première ligne de instance.txt)
+
+            // TODO: Les équipes ont un certain nombre de jour de repos avant de rejouer
+
+            // TODO: On optimise les matchs pour la télé et le live
+
             Solver solver = model.getSolver();
+            solver.setGeometricalRestart(2, 2.1, new FailCounter(model, 2), 25000);
+
             Solution solution = solver.findSolution();
+
+            for (Match match : matches) {
+                System.out.printf("Match #%s (%s)\n", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+            }
+
+            System.out.println();
 
             for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
                 System.out.printf("Jour %d: ", dayNumber + 1);
                 for (IntVar matchId : calendar[dayNumber]) {
-                    int realMatchId = solution.getIntVal(matchId);
-                    System.out.printf("Match #%s (%s), ", realMatchId, String.join(" vs ", Arrays.stream(matches[realMatchId].teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+                    Match match = matches[solution.getIntVal(matchId)];
+                    System.out.printf("Match #%s (%s), ", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
                 }
 
                 System.out.println();
             }
+
+            System.out.println();
+
+            solver.printStatistics();
 
 
         } catch (java.io.IOException exception) {
