@@ -110,6 +110,7 @@ public class Main {
             // TODO: On optimise les matchs pour la télé et le live
 
             Solver solver = model.getSolver();
+            // TODO: Regarder voir si on peut trouver une meilleure façon de faire de la recherche (activityBasedSearch ou autre)
             solver.setGeometricalRestart(2, 2.1, new FailCounter(model, 2), 25000);
 
             Solution solution = solver.findSolution();
