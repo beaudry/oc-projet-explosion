@@ -46,7 +46,10 @@ public class Main {
 
             List<String> lines = Files.readAllLines(Paths.get(args[0]));
 
-            int MATCHES_PER_DAY = Integer.valueOf(lines.get(0));
+            String[] parameters = lines.get(0).split(" ");
+            int MATCHES_PER_DAY = Integer.valueOf(parameters[0]);
+            int DAYS_BETWEEN_MATCHES = Integer.valueOf(parameters[1]);
+
             Team[] teams = new Team[lines.size() - 1];
             String[] teamParameters;
 
@@ -71,14 +74,16 @@ public class Main {
                 );
             }
 
-            IntVar[][] calendar = new IntVar[matches.length / MATCHES_PER_DAY][MATCHES_PER_DAY];
+
+            Match[][] calendar = new Match[matches.length / MATCHES_PER_DAY][MATCHES_PER_DAY];
             for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
-                calendar[dayNumber] = model.intVarArray(MATCHES_PER_DAY, 0, matches.length);
+                for (int matchNumber = 0; matchNumber < calendar[dayNumber].length; matchNumber++) {
+                    calendar[dayNumber][matchNumber] = matches[dayNumber * calendar[dayNumber].length + matchNumber];
+                }
             }
 
             // Avoir des équipes différentes à chaque match (et triées)
             for (Match match : matches) {
-
                 for (int teamNumber = 0; teamNumber < match.teamsIds.length - 1; teamNumber++) {
                     model.arithm(match.teamsIds[teamNumber], "<", match.teamsIds[teamNumber + 1]).post();
                 }
@@ -94,18 +99,23 @@ public class Main {
                 }
             }
 
-            // Chaque match ne se produit qu'une seule fois dans la session.
-            IntVar[] flatCalendar = new IntVar[matches.length];
-            for (int i = 0; i < calendar.length; i++) {
-                for (int j = 0; j < calendar[i].length; j++) {
-                    flatCalendar[i * calendar[i].length + j] = calendar[i][j];
-                }
-            }
-            model.allDifferent(flatCalendar).post();
-
             // TODO: Chaque équipe joue le même nombre de match (ce nombre est variable et sera le deuxième argument de la première ligne de instance.txt)
 
-            // TODO: Les équipes ont un certain nombre de jour de repos avant de rejouer
+            for (int i = 0; i < calendar.length - DAYS_BETWEEN_MATCHES + 1; i++) {
+                IntVar[] flatCalendarSegment = new IntVar[TEAMS_PER_MATCH * MATCHES_PER_DAY * DAYS_BETWEEN_MATCHES];
+                for (int j = 0; j < DAYS_BETWEEN_MATCHES; j++) {
+                    for (int k = 0; k < MATCHES_PER_DAY; k++) {
+                        for (int l = 0; l < TEAMS_PER_MATCH; l++) {
+                            flatCalendarSegment[
+                                j * MATCHES_PER_DAY * TEAMS_PER_MATCH +
+                                k * TEAMS_PER_MATCH +
+                                l
+                            ] = calendar[i + j][k].teamsIds[l];
+                        }
+                    }
+                }
+                model.allDifferent(flatCalendarSegment).post();
+            }
 
             // TODO: On optimise les matchs pour la télé et le live
 
@@ -115,16 +125,17 @@ public class Main {
 
             Solution solution = solver.findSolution();
 
-            for (Match match : matches) {
-                System.out.printf("Match #%s (%s)\n", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+            for (Match dayMatches[] : calendar) {
+                for (Match match : dayMatches) {
+                    System.out.printf("Match #%s (%s)\n", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+                }
             }
 
             System.out.println();
 
             for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
                 System.out.printf("Jour %d: ", dayNumber + 1);
-                for (IntVar matchId : calendar[dayNumber]) {
-                    Match match = matches[solution.getIntVal(matchId)];
+                for (Match match : calendar[dayNumber]) {
                     System.out.printf("Match #%s (%s), ", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
                 }
 
