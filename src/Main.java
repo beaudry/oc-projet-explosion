@@ -109,6 +109,26 @@ public class Main {
 
             // TODO: On optimise les matchs pour la télé et le live
 
+            IntVar[] matchesTvPopularity = new IntVar[matches.length];
+            IntVar[] matchesLivePopularity = new IntVar[matches.length];
+
+            for (int i = 0; i < matches.length; i++)
+            {
+                IntVar idteam1 = matches[i].teamsIds[0];
+                IntVar idteam2 = matches[i].teamsIds[1];
+                IntVar idteam3 = matches[i].teamsIds[2];
+                IntVar livePopularityteam1 = teams[idteam1.getValue()-1].livePopularity;
+                IntVar livePopularityteam2 = teams[idteam2.getValue()-1].livePopularity;
+                IntVar livePopularityteam3 = teams[idteam3.getValue()-1].livePopularity;
+                int totalLivePopularity = livePopularityteam1.getValue() + livePopularityteam2.getValue() + livePopularityteam3.getValue();
+                matchesLivePopularity[i] = model.intVar(totalLivePopularity);
+                IntVar tvPopularityteam1 = teams[idteam1.getValue()-1].tvPopularity;
+                IntVar tvPopularityteam2 = teams[idteam2.getValue()-1].tvPopularity;
+                IntVar tvPopularityteam3 = teams[idteam3.getValue()-1].tvPopularity;
+                int totalTvPopularity = tvPopularityteam1.getValue() + tvPopularityteam2.getValue() + tvPopularityteam3.getValue();
+                matchesTvPopularity[i] = model.intVar(totalTvPopularity);
+            }
+
             Solver solver = model.getSolver();
             // TODO: Regarder voir si on peut trouver une meilleure façon de faire de la recherche (activityBasedSearch ou autre)
             solver.setGeometricalRestart(2, 2.1, new FailCounter(model, 2), 25000);
