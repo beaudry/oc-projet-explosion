@@ -21,7 +21,7 @@ public class Main {
         final IntVar tvPopularity;
         final IntVar livePopularity;
 
-        public Team(IntVar id, IntVar tvPopularity, IntVar livePopularity) {
+        Team(IntVar id, IntVar tvPopularity, IntVar livePopularity) {
             this.id = id;
             this.tvPopularity = tvPopularity;
             this.livePopularity = livePopularity;
@@ -33,7 +33,7 @@ public class Main {
         final IntVar[] teamsIds;
         final BoolVar isShownOnTv;
 
-        public Match(int id, BoolVar isShownOnTv, IntVar[] teamsIds) {
+        Match(int id, BoolVar isShownOnTv, IntVar[] teamsIds) {
             this.id = id;
             this.isShownOnTv = isShownOnTv;
             this.teamsIds = teamsIds;
@@ -78,9 +78,7 @@ public class Main {
 
             Match[][] calendar = new Match[matches.length / MATCHES_PER_DAY][MATCHES_PER_DAY];
             for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
-                for (int matchNumber = 0; matchNumber < calendar[dayNumber].length; matchNumber++) {
-                    calendar[dayNumber][matchNumber] = matches[dayNumber * calendar[dayNumber].length + matchNumber];
-                }
+                System.arraycopy(matches, dayNumber * calendar[dayNumber].length, calendar[dayNumber], 0, calendar[dayNumber].length);
             }
 
             // Avoir des équipes différentes à chaque match (et triées)
@@ -121,7 +119,6 @@ public class Main {
             // TODO: On optimise les matchs pour la télé et le live
 
             Solver solver = model.getSolver();
-            // TODO: Regarder voir si on peut trouver une meilleure façon de faire de la recherche (activityBasedSearch ou autre)
             solver.setSearch(Search.minDomLBSearch(Arrays.stream(matches).flatMap(match -> Arrays.stream(match.teamsIds)).toArray(IntVar[]::new)));
 
             Solution solution = solver.findSolution();
