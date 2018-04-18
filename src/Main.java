@@ -2,7 +2,7 @@ import org.chocosolver.solver.Model;
 import org.chocosolver.solver.Solution;
 import org.chocosolver.solver.Solver;
 import org.chocosolver.solver.constraints.Constraint;
-import org.chocosolver.solver.search.limits.FailCounter;
+import org.chocosolver.solver.search.strategy.Search;
 import org.chocosolver.solver.variables.BoolVar;
 import org.chocosolver.solver.variables.IntVar;
 
@@ -47,8 +47,9 @@ public class Main {
             List<String> lines = Files.readAllLines(Paths.get(args[0]));
 
             String[] parameters = lines.get(0).split(" ");
-            int MATCHES_PER_DAY = Integer.valueOf(parameters[0]);
-            int DAYS_BETWEEN_MATCHES = Integer.valueOf(parameters[1]);
+            int MATCHES_PLAYED_BY_EACH_TEAM = Integer.valueOf(parameters[0]);
+            int MATCHES_PER_DAY = Integer.valueOf(parameters[1]);
+            int DAYS_BETWEEN_MATCHES = Integer.valueOf(parameters[2]);
 
             Team[] teams = new Team[lines.size() - 1];
             String[] teamParameters;
@@ -65,7 +66,7 @@ public class Main {
             }
 
 
-            Match[] matches = new Match[teams.length / TEAMS_PER_MATCH];
+            Match[] matches = new Match[MATCHES_PLAYED_BY_EACH_TEAM * teams.length / TEAMS_PER_MATCH];
             for (int matchIndex = 0; matchIndex < matches.length; matchIndex++) {
                 matches[matchIndex] = new Match(
                         matchIndex + 1,
@@ -121,28 +122,30 @@ public class Main {
 
             Solver solver = model.getSolver();
             // TODO: Regarder voir si on peut trouver une meilleure façon de faire de la recherche (activityBasedSearch ou autre)
-            solver.setGeometricalRestart(2, 2.1, new FailCounter(model, 2), 25000);
+            solver.setSearch(Search.minDomLBSearch(Arrays.stream(matches).flatMap(match -> Arrays.stream(match.teamsIds)).toArray(IntVar[]::new)));
 
             Solution solution = solver.findSolution();
 
-            for (Match dayMatches[] : calendar) {
-                for (Match match : dayMatches) {
-                    System.out.printf("Match #%s (%s)\n", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+            if (solution != null) {
+                for (Match dayMatches[] : calendar) {
+                    for (Match match : dayMatches) {
+                        System.out.printf("Match #%s (%s)\n", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+                    }
                 }
-            }
 
-            System.out.println();
+                System.out.println();
 
-            for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
-                System.out.printf("Jour %d: ", dayNumber + 1);
-                for (Match match : calendar[dayNumber]) {
-                    System.out.printf("Match #%s (%s), ", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+                for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
+                    System.out.printf("Jour %d: ", dayNumber + 1);
+                    for (Match match : calendar[dayNumber]) {
+                        System.out.printf("Match #%s (%s), ", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+                    }
+
+                    System.out.println();
                 }
 
                 System.out.println();
             }
-
-            System.out.println();
 
             solver.printStatistics();
 
