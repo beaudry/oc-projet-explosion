@@ -2,7 +2,7 @@ import org.chocosolver.solver.Model;
 import org.chocosolver.solver.Solution;
 import org.chocosolver.solver.Solver;
 import org.chocosolver.solver.constraints.Constraint;
-import org.chocosolver.solver.search.limits.FailCounter;
+import org.chocosolver.solver.search.strategy.Search;
 import org.chocosolver.solver.variables.BoolVar;
 import org.chocosolver.solver.variables.IntVar;
 
@@ -17,11 +17,11 @@ public class Main {
     private static final int TEAMS_PER_MATCH = 3;
 
     static class Team {
-        final int id;
+        final IntVar id;
         final IntVar tvPopularity;
-        final int livePopularity;
+        final IntVar livePopularity;
 
-        public Team(int id, IntVar tvPopularity, int livePopularity) {
+        Team(IntVar id, IntVar tvPopularity, IntVar livePopularity) {
             this.id = id;
             this.tvPopularity = tvPopularity;
             this.livePopularity = livePopularity;
@@ -33,7 +33,7 @@ public class Main {
         final IntVar[] teamsIds;
         final BoolVar isShownOnTv;
 
-        public Match(int id, BoolVar isShownOnTv, IntVar[] teamsIds) {
+        Match(int id, BoolVar isShownOnTv, IntVar[] teamsIds) {
             this.id = id;
             this.isShownOnTv = isShownOnTv;
             this.teamsIds = teamsIds;
@@ -47,8 +47,9 @@ public class Main {
             List<String> lines = Files.readAllLines(Paths.get(args[0]));
 
             String[] parameters = lines.get(0).split(" ");
-            int MATCHES_PER_DAY = Integer.valueOf(parameters[0]);
-            int DAYS_BETWEEN_MATCHES = Integer.valueOf(parameters[1]);
+            int MATCHES_PLAYED_BY_EACH_TEAM = Integer.valueOf(parameters[0]);
+            int MATCHES_PER_DAY = Integer.valueOf(parameters[1]);
+            int DAYS_BETWEEN_MATCHES = Integer.valueOf(parameters[2]);
 
             Team[] teams = new Team[lines.size() - 1];
             String[] teamParameters;
@@ -58,14 +59,14 @@ public class Main {
                 int teamIndex = lineNumber - LINE_NUMBER_TEAMS_START;
 
                 teams[teamIndex] = new Team(
-                        teamIndex + 1,
+                        model.intVar(teamIndex + 1),
                         model.intVar(Integer.valueOf(teamParameters[0])),
-                        Integer.valueOf(teamParameters[1])
+                        model.intVar(Integer.valueOf(teamParameters[1]))
                 );
             }
 
 
-            Match[] matches = new Match[teams.length / TEAMS_PER_MATCH];
+            Match[] matches = new Match[MATCHES_PLAYED_BY_EACH_TEAM * teams.length / TEAMS_PER_MATCH];
             for (int matchIndex = 0; matchIndex < matches.length; matchIndex++) {
                 matches[matchIndex] = new Match(
                         matchIndex + 1,
@@ -77,9 +78,7 @@ public class Main {
 
             Match[][] calendar = new Match[matches.length / MATCHES_PER_DAY][MATCHES_PER_DAY];
             for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
-                for (int matchNumber = 0; matchNumber < calendar[dayNumber].length; matchNumber++) {
-                    calendar[dayNumber][matchNumber] = matches[dayNumber * calendar[dayNumber].length + matchNumber];
-                }
+                System.arraycopy(matches, dayNumber * calendar[dayNumber].length, calendar[dayNumber], 0, calendar[dayNumber].length);
             }
 
             // Avoir des équipes différentes à chaque match (et triées)
@@ -202,22 +201,23 @@ public class Main {
             Solution solution = solver.findOptimalSolution(totalPopularityDifference, model.MAXIMIZE);
             //Solution optimalSolution = solver.findOptimalSolution(totalLoss, Model.MINIMIZE);
 
-            for (Match dayMatches[] : calendar) {
-                for (Match match : dayMatches) {
-                    System.out.printf("Match #%s (%s)\n", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
-                }
-            }
-
-            System.out.println();
-
-            for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
-                System.out.printf("Jour %d: ", dayNumber + 1);
-                for (Match match : calendar[dayNumber]) {
-                    System.out.printf("Match #%s (%s), ", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+            if (solution != null) {
+                for (Match dayMatches[] : calendar) {
+                    for (Match match : dayMatches) {
+                        System.out.printf("Match #%s (%s)\n", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+                    }
                 }
 
                 System.out.println();
-            }
+
+                for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
+                    System.out.printf("Jour %d: ", dayNumber + 1);
+                    for (Match match : calendar[dayNumber]) {
+                        System.out.printf("Match #%s (%s), ", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+                    }
+
+                    System.out.println();
+                }
 
             System.out.println();
 
