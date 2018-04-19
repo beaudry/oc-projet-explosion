@@ -2,6 +2,7 @@ import org.chocosolver.solver.Model;
 import org.chocosolver.solver.Solution;
 import org.chocosolver.solver.Solver;
 import org.chocosolver.solver.constraints.Constraint;
+import org.chocosolver.solver.search.limits.FailCounter;
 import org.chocosolver.solver.search.strategy.Search;
 import org.chocosolver.solver.variables.BoolVar;
 import org.chocosolver.solver.variables.IntVar;
@@ -141,6 +142,7 @@ public class Main {
                         }
                     }
 
+                    //model.arithm(tvPopularities[2], "=", matchTvPopularity[i][j]).post();
                     model.sum(tvPopularities, "=", matchTvPopularity[i][j]).post();
                     model.sum(livePopularities, "=", matchLivePopularity[i][j]).post();
                 }
@@ -172,27 +174,8 @@ public class Main {
             }
 
             IntVar totalPopularityDifference = model.intVar("Différence de popularité totale", 0, 10000);
-            model.sum(popularityDifferencePerDay, "=", totalPopularityDifference).post();
-
-            /*IntVar[] matchesTvPopularity = new IntVar[matches.length];
-            IntVar[] matchesLivePopularity = new IntVar[matches.length];
-
-            for (int i = 0; i < matches.length; i++)
-            {
-                IntVar idteam1 = matches[i].teamsIds[0];
-                IntVar idteam2 = matches[i].teamsIds[1];
-                IntVar idteam3 = matches[i].teamsIds[2];
-                IntVar livePopularityteam1 = teams[idteam1.getValue()].livePopularity;
-                IntVar livePopularityteam2 = teams[idteam2.getValue()].livePopularity;
-                IntVar livePopularityteam3 = teams[idteam3.getValue()].livePopularity;
-                int totalLivePopularity = livePopularityteam1.getValue() + livePopularityteam2.getValue() + livePopularityteam3.getValue();
-                matchesLivePopularity[i] = model.intVar(totalLivePopularity);
-                IntVar tvPopularityteam1 = teams[idteam1.getValue()].tvPopularity;
-                IntVar tvPopularityteam2 = teams[idteam2.getValue()].tvPopularity;
-                IntVar tvPopularityteam3 = teams[idteam3.getValue()].tvPopularity;
-                int totalTvPopularity = tvPopularityteam1.getValue() + tvPopularityteam2.getValue() + tvPopularityteam3.getValue();
-                matchesTvPopularity[i] = model.intVar(totalTvPopularity);
-            }*/
+            //model.sum(popularityDifferencePerDay, "=", totalPopularityDifference).post();
+            model.arithm(matchTvPopularity[0][0], "=", totalPopularityDifference).post();
 
             Solver solver = model.getSolver();
             // TODO: Regarder voir si on peut trouver une meilleure façon de faire de la recherche (activityBasedSearch ou autre)
@@ -218,10 +201,13 @@ public class Main {
 
                     System.out.println();
                 }
+            }
 
             System.out.println();
 
             System.out.printf("Difference de popularite maximum: %s", solution.getIntVal(totalPopularityDifference));
+
+            System.out.println();
 
             System.out.println();
 
