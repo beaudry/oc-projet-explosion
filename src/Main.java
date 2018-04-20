@@ -2,9 +2,9 @@ import org.chocosolver.solver.Model;
 import org.chocosolver.solver.Solution;
 import org.chocosolver.solver.Solver;
 import org.chocosolver.solver.constraints.Constraint;
+import org.chocosolver.solver.constraints.extension.Tuples;
 import org.chocosolver.solver.search.limits.FailCounter;
 import org.chocosolver.solver.search.strategy.Search;
-import org.chocosolver.solver.variables.BoolVar;
 import org.chocosolver.solver.variables.IntVar;
 
 import java.nio.file.Files;
@@ -18,11 +18,11 @@ public class Main {
     private static final int TEAMS_PER_MATCH = 3;
 
     static class Team {
-        final IntVar id;
-        final IntVar tvPopularity;
-        final IntVar livePopularity;
+        final int id;
+        final int tvPopularity;
+        final int livePopularity;
 
-        Team(IntVar id, IntVar tvPopularity, IntVar livePopularity) {
+        Team(int id, int tvPopularity, int livePopularity) {
             this.id = id;
             this.tvPopularity = tvPopularity;
             this.livePopularity = livePopularity;
@@ -31,13 +31,23 @@ public class Main {
 
     static class Match {
         final int id;
-        final IntVar[] teamsIds;
-        final BoolVar isShownOnTv;
+        final IntVar[][] variables;
 
-        Match(int id, BoolVar isShownOnTv, IntVar[] teamsIds) {
+        Match(int id, IntVar[] teamsIds, IntVar[] tvPopularities, IntVar[] livePopularities) {
             this.id = id;
-            this.isShownOnTv = isShownOnTv;
-            this.teamsIds = teamsIds;
+            variables = new IntVar[][]{teamsIds, tvPopularities, livePopularities};
+        }
+
+        IntVar[] getTeamIds() {
+            return variables[0];
+        }
+
+        IntVar[] getTvPopularities() {
+            return variables[1];
+        }
+
+        IntVar[] getLivePopularities() {
+            return variables[2];
         }
     }
 
@@ -60,9 +70,9 @@ public class Main {
                 int teamIndex = lineNumber - LINE_NUMBER_TEAMS_START;
 
                 teams[teamIndex] = new Team(
-                        model.intVar(teamIndex + 1),
-                        model.intVar(Integer.valueOf(teamParameters[0])),
-                        model.intVar(Integer.valueOf(teamParameters[1]))
+                        teamIndex + 1,
+                        Integer.valueOf(teamParameters[0]),
+                        Integer.valueOf(teamParameters[1])
                 );
             }
 
@@ -71,8 +81,9 @@ public class Main {
             for (int matchIndex = 0; matchIndex < matches.length; matchIndex++) {
                 matches[matchIndex] = new Match(
                         matchIndex + 1,
-                        model.boolVar(),
-                        model.intVarArray(TEAMS_PER_MATCH, 0, teams.length)
+                        model.intVarArray(TEAMS_PER_MATCH, 0, teams.length),
+                        model.intVarArray(TEAMS_PER_MATCH, 0, 100),
+                        model.intVarArray(TEAMS_PER_MATCH, 0, 100)
                 );
             }
 
@@ -84,15 +95,15 @@ public class Main {
 
             // Avoir des équipes différentes à chaque match (et triées)
             for (Match match : matches) {
-                for (int teamNumber = 0; teamNumber < match.teamsIds.length - 1; teamNumber++) {
-                    model.arithm(match.teamsIds[teamNumber], "<", match.teamsIds[teamNumber + 1]).post();
+                for (int teamNumber = 0; teamNumber < match.getTeamIds().length - 1; teamNumber++) {
+                    model.arithm(match.getTeamIds()[teamNumber], "<", match.getTeamIds()[teamNumber + 1]).post();
                 }
 
                 for (Match otherMatch : matches) {
                     if (match != otherMatch) {
-                        Constraint[] differents = new Constraint[match.teamsIds.length];
-                        for (int teamIndex = 0; teamIndex < match.teamsIds.length; teamIndex++) {
-                            differents[teamIndex] = model.allDifferent(match.teamsIds[teamIndex], otherMatch.teamsIds[teamIndex]);
+                        Constraint[] differents = new Constraint[match.getTeamIds().length];
+                        for (int teamIndex = 0; teamIndex < match.getTeamIds().length; teamIndex++) {
+                            differents[teamIndex] = model.allDifferent(match.getTeamIds()[teamIndex], otherMatch.getTeamIds()[teamIndex]);
                         }
                         model.or(differents).post();
                     }
@@ -110,7 +121,7 @@ public class Main {
                                 j * MATCHES_PER_DAY * TEAMS_PER_MATCH +
                                 k * TEAMS_PER_MATCH +
                                 l
-                            ] = calendar[i + j][k].teamsIds[l];
+                                    ] = calendar[i + j][k].getTeamIds()[l];
                         }
                     }
                 }
@@ -123,36 +134,33 @@ public class Main {
             IntVar[][] matchTvPopularity = model.intVarMatrix(matches.length / MATCHES_PER_DAY, MATCHES_PER_DAY, 0, 300);
             IntVar[][] matchLivePopularity = model.intVarMatrix(matches.length / MATCHES_PER_DAY, MATCHES_PER_DAY, 0, 300);
 
-            for (int i = 0; i < matches.length / MATCHES_PER_DAY; i++)
-            {
-                for(int j = 0; j < MATCHES_PER_DAY; j++)
-                {
-                    IntVar[] tvPopularities = model.intVarArray(TEAMS_PER_MATCH, 0, 100);
-                    IntVar[] livePopularities = model.intVarArray(TEAMS_PER_MATCH, 0, 100);
-                    for ( int k = 0; k < teams.length; k++)
-                    {
-                        for ( int l = 0; l < TEAMS_PER_MATCH; l++)
-                        {
-                            model.ifThen(model.arithm(calendar[i][j].teamsIds[l], "=", teams[k].id),
-                                    model.arithm(tvPopularities[l], "=", teams[k].tvPopularity)
-                            );
-                            model.ifThen(model.arithm(calendar[i][j].teamsIds[l], "=", teams[k].id),
-                                    model.arithm(livePopularities[l], "=", teams[k].livePopularity)
-                            );
-                        }
-                    }
+            Tuples tvPopularitiesTuples = new Tuples();
+            Tuples livePopularitiesTuples = new Tuples();
+            for (Team team : teams) {
+                tvPopularitiesTuples.add(team.id, team.tvPopularity);
+                livePopularitiesTuples.add(team.id, team.livePopularity);
+            }
 
-                    //model.arithm(tvPopularities[2], "=", matchTvPopularity[i][j]).post();
-                    model.sum(tvPopularities, "=", matchTvPopularity[i][j]).post();
-                    model.sum(livePopularities, "=", matchLivePopularity[i][j]).post();
+            for (Match match : matches) {
+                for (int i = 0; i < match.getTeamIds().length; i++) {
+                    model.table(match.getTeamIds()[i], match.getTvPopularities()[i], tvPopularitiesTuples).post();
+                    model.table(match.getTeamIds()[i], match.getLivePopularities()[i], livePopularitiesTuples).post();
                 }
+            }
+
+            for (int i = 0; i < calendar.length; i++) {
+                for (int j = 0; j < calendar[i].length; j++) {
+                    //model.arithm(tvPopularities[2], "=", matchTvPopularity[i][j]).post();
+                    model.sum(calendar[i][j].getTvPopularities(), "=", matchTvPopularity[i][j]).post();
+                    model.sum(calendar[i][j].getLivePopularities(), "=", matchLivePopularity[i][j]).post();
+                }
+
                 IntVar maxTvPopularity = model.intVar(0, 300);
                 model.max(maxTvPopularity, matchTvPopularity[i]);
                 IntVar totalTvPopularityDifferences = model.intVar(0, 600);
                 IntVar[] TvPopularityDifferences = model.intVarArray(TEAMS_PER_MATCH, 0, 300);
 
-                for (int m = 0; m < MATCHES_PER_DAY; m++)
-                {
+                for (int m = 0; m < MATCHES_PER_DAY; m++) {
                     model.arithm(maxTvPopularity, "-", matchTvPopularity[i][m], "=", TvPopularityDifferences[m]).post();
                 }
 
@@ -163,8 +171,7 @@ public class Main {
                 IntVar totalLivePopularityDifferences = model.intVar(0, 600);
                 IntVar[] LivePopularityDifferences = model.intVarArray(TEAMS_PER_MATCH, 0, 300);
 
-                for (int m = 0; m < MATCHES_PER_DAY; m++)
-                {
+                for (int m = 0; m < MATCHES_PER_DAY; m++) {
                     model.arithm(maxLivePopularity, "-", matchLivePopularity[i][m], "=", LivePopularityDifferences[m]).post();
                 }
 
@@ -177,8 +184,11 @@ public class Main {
             //model.sum(popularityDifferencePerDay, "=", totalPopularityDifference).post();
             model.arithm(matchTvPopularity[0][0], "=", totalPopularityDifference).post();
 
+            IntVar[] allVariables = Arrays.stream(matches).flatMap(match -> Arrays.stream(match.variables).flatMap(Arrays::stream)).toArray(IntVar[]::new);
+
             Solver solver = model.getSolver();
             // TODO: Regarder voir si on peut trouver une meilleure façon de faire de la recherche (activityBasedSearch ou autre)
+            solver.setSearch(Search.activityBasedSearch(allVariables));
             solver.setGeometricalRestart(2, 2.1, new FailCounter(model, 2), 25000);
 
             Solution solution = solver.findOptimalSolution(totalPopularityDifference, model.MAXIMIZE);
@@ -187,7 +197,7 @@ public class Main {
             if (solution != null) {
                 for (Match dayMatches[] : calendar) {
                     for (Match match : dayMatches) {
-                        System.out.printf("Match #%s (%s)\n", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+                        System.out.printf("Match #%s (%s) \n", match.id, String.join(" vs ", Arrays.stream(match.getTeamIds()).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
                     }
                 }
 
@@ -196,24 +206,17 @@ public class Main {
                 for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
                     System.out.printf("Jour %d: ", dayNumber + 1);
                     for (Match match : calendar[dayNumber]) {
-                        System.out.printf("Match #%s (%s), ", match.id, String.join(" vs ", Arrays.stream(match.teamsIds).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+                        System.out.printf("Match #%s (%s), ", match.id, String.join(" vs ", Arrays.stream(match.getTeamIds()).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
                     }
 
                     System.out.println();
                 }
+
+                System.out.printf("\nDifference de popularite maximum: %s\n", solution.getIntVal(totalPopularityDifference));
             }
 
             System.out.println();
-
-            System.out.printf("Difference de popularite maximum: %s", solution.getIntVal(totalPopularityDifference));
-
-            System.out.println();
-
-            System.out.println();
-
             solver.printStatistics();
-
-
         } catch (java.io.IOException exception) {
             System.out.print("Le fichier n'existe pas");
         }
