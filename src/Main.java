@@ -10,13 +10,17 @@ import org.chocosolver.solver.variables.IntVar;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
 
-public class Main {
+class Main {
     private static final String PARAMETER_SEPARATOR = " ";
     private static final int LINE_NUMBER_TEAMS_START = 1;
     private static final int TEAMS_PER_MATCH = 3;
     private static final int MAX_TEAM_POPULARITY = 5;
+    private static final int TV_MATCH_INDEX = 0;
+    private static final int LIVE_MATCH_INDEX = 1;
 
     static class Team {
         final int id;
@@ -77,17 +81,19 @@ public class Main {
                 );
             }
 
+            List<IntVar> allVariables = new LinkedList<>();
 
             Match[] matches = new Match[MATCHES_PLAYED_BY_EACH_TEAM * teams.length / TEAMS_PER_MATCH];
             for (int matchIndex = 0; matchIndex < matches.length; matchIndex++) {
                 matches[matchIndex] = new Match(
                         matchIndex + 1,
                         model.intVarArray(TEAMS_PER_MATCH, 0, teams.length),
-                        model.intVarArray(TEAMS_PER_MATCH, 0, 100),
-                        model.intVarArray(TEAMS_PER_MATCH, 0, 100)
+                        model.intVarArray(TEAMS_PER_MATCH, 0, MAX_TEAM_POPULARITY * TEAMS_PER_MATCH),
+                        model.intVarArray(TEAMS_PER_MATCH, 0, MAX_TEAM_POPULARITY * TEAMS_PER_MATCH)
                 );
             }
 
+            allVariables.addAll(Arrays.stream(matches).flatMap(match -> Arrays.stream(match.variables).flatMap(Arrays::stream)).collect(Collectors.toList()));
 
             Match[][] calendar = new Match[matches.length / MATCHES_PER_DAY][MATCHES_PER_DAY];
             for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
@@ -113,15 +119,16 @@ public class Main {
 
             // TODO: Chaque équipe joue le même nombre de match (ce nombre est variable et sera le deuxième argument de la première ligne de instance.txt)
 
+            // Une équipe a un certain nombre de jours de repos entre deux parties
             for (int i = 0; i < calendar.length - DAYS_BETWEEN_MATCHES + 1; i++) {
                 IntVar[] flatCalendarSegment = new IntVar[TEAMS_PER_MATCH * MATCHES_PER_DAY * DAYS_BETWEEN_MATCHES];
                 for (int j = 0; j < DAYS_BETWEEN_MATCHES; j++) {
                     for (int k = 0; k < MATCHES_PER_DAY; k++) {
                         for (int l = 0; l < TEAMS_PER_MATCH; l++) {
                             flatCalendarSegment[
-                                j * MATCHES_PER_DAY * TEAMS_PER_MATCH +
-                                k * TEAMS_PER_MATCH +
-                                l
+                                    j * MATCHES_PER_DAY * TEAMS_PER_MATCH +
+                                            k * TEAMS_PER_MATCH +
+                                            l
                                     ] = calendar[i + j][k].getTeamIds()[l];
                         }
                     }
@@ -130,11 +137,6 @@ public class Main {
             }
 
             // On optimise les matchs pour la télé et le live
-
-            IntVar[] popularityDifferencePerDay = model.intVarArray(matches.length / MATCHES_PER_DAY, 0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH*MATCHES_PER_DAY*2);
-            IntVar[][] matchTvPopularity = model.intVarMatrix(matches.length / MATCHES_PER_DAY, MATCHES_PER_DAY, 0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH);
-            IntVar[][] matchLivePopularity = model.intVarMatrix(matches.length / MATCHES_PER_DAY, MATCHES_PER_DAY, 0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH);
-
             Tuples tvPopularitiesTuples = new Tuples();
             Tuples livePopularitiesTuples = new Tuples();
             for (Team team : teams) {
@@ -149,48 +151,21 @@ public class Main {
                 }
             }
 
-            for (int i = 0; i < calendar.length; i++) {
-                for (int j = 0; j < calendar[i].length; j++) {
-                    model.sum(calendar[i][j].getTvPopularities(), "=", matchTvPopularity[i][j]).post();
-                    model.sum(calendar[i][j].getLivePopularities(), "=", matchLivePopularity[i][j]).post();
-                }
+            IntVar maxTvPopularity = model.intVar(0, MAX_TEAM_POPULARITY * TEAMS_PER_MATCH * calendar.length);
+            model.sum(Arrays.stream(calendar).flatMap(matchesOfDay -> Arrays.stream(matchesOfDay[TV_MATCH_INDEX].getTvPopularities())).toArray(IntVar[]::new), "=", maxTvPopularity).post();
 
-                IntVar maxTvPopularity = model.intVar(0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH);
-                model.max(maxTvPopularity, matchTvPopularity[i]).post();
-                IntVar totalTvPopularityDifferences = model.intVar(0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH*MATCHES_PER_DAY);
-                IntVar[] TvPopularityDifferences = model.intVarArray(MATCHES_PER_DAY, 0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH);
+            IntVar maxLivePopularity = model.intVar(0, MAX_TEAM_POPULARITY * TEAMS_PER_MATCH * calendar.length);
+            model.sum(Arrays.stream(calendar).flatMap(matchesOfDay -> Arrays.stream(matchesOfDay[LIVE_MATCH_INDEX].getLivePopularities())).toArray(IntVar[]::new), "=", maxLivePopularity).post();
 
-                for (int m = 0; m < MATCHES_PER_DAY; m++) {
-                    model.arithm(maxTvPopularity, "-", matchTvPopularity[i][m], "=", TvPopularityDifferences[m]).post();
-                }
-
-                model.sum(TvPopularityDifferences, "=", totalTvPopularityDifferences).post();
-
-                IntVar maxLivePopularity = model.intVar(0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH);
-                model.max(maxLivePopularity, matchLivePopularity[i]).post();
-                IntVar totalLivePopularityDifferences = model.intVar(0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH*MATCHES_PER_DAY);
-                IntVar[] LivePopularityDifferences = model.intVarArray(MATCHES_PER_DAY, 0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH);
-
-                for (int m = 0; m < MATCHES_PER_DAY; m++) {
-                    model.arithm(maxLivePopularity, "-", matchLivePopularity[i][m], "=", LivePopularityDifferences[m]).post();
-                }
-
-                model.sum(LivePopularityDifferences, "=", totalLivePopularityDifferences).post();
-
-                model.arithm(totalTvPopularityDifferences, "+", totalLivePopularityDifferences, "=",popularityDifferencePerDay[i]).post();
-            }
-
-            IntVar totalPopularityDifference = model.intVar("Différence de popularité totale", 0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH*MATCHES_PER_DAY*2*calendar.length);
-            model.sum(popularityDifferencePerDay, "=", totalPopularityDifference).post();
-
-            IntVar[] allVariables = Arrays.stream(matches).flatMap(match -> Arrays.stream(match.variables).flatMap(Arrays::stream)).toArray(IntVar[]::new);
+            IntVar totalPopularityDifference = model.intVar("Popularité totale", 0, MAX_TEAM_POPULARITY * TEAMS_PER_MATCH * MATCHES_PER_DAY * 2 * calendar.length);
+            model.arithm(maxLivePopularity, "+", maxTvPopularity, "=", totalPopularityDifference).post();
 
             Solver solver = model.getSolver();
             // TODO: Regarder voir si on peut trouver une meilleure façon de faire de la recherche (activityBasedSearch ou autre)
-            solver.setSearch(Search.activityBasedSearch(allVariables));
+            solver.setSearch(Search.minDomUBSearch(allVariables.toArray(new IntVar[0])));
             solver.setGeometricalRestart(2, 2.1, new FailCounter(model, 2), 25000);
 
-            Solution solution = solver.findOptimalSolution(totalPopularityDifference, model.MAXIMIZE);
+            Solution solution = solver.findOptimalSolution(totalPopularityDifference, Model.MAXIMIZE);
 
             if (solution != null) {
                 for (Match dayMatches[] : calendar) {
@@ -210,7 +185,7 @@ public class Main {
                     System.out.println();
                 }
 
-                System.out.printf("\nDifference de popularite maximum: %s\n", solution.getIntVal(totalPopularityDifference));
+                System.out.printf("\nPopularité de l'horaire: %s\n", solution.getIntVal(totalPopularityDifference));
             }
 
             System.out.println();
