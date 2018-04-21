@@ -3,7 +3,6 @@ import org.chocosolver.solver.Solution;
 import org.chocosolver.solver.Solver;
 import org.chocosolver.solver.constraints.Constraint;
 import org.chocosolver.solver.constraints.extension.Tuples;
-import org.chocosolver.solver.search.limits.FailCounter;
 import org.chocosolver.solver.search.strategy.Search;
 import org.chocosolver.solver.variables.IntVar;
 
@@ -172,7 +171,6 @@ class Main {
             Solver solver = model.getSolver();
             // TODO: Regarder voir si on peut trouver une meilleure façon de faire de la recherche (activityBasedSearch ou autre)
             solver.setSearch(Search.activityBasedSearch(allVariables.toArray(new IntVar[0])));
-            solver.setGeometricalRestart(2, 2.1, new FailCounter(model, 2), 25000);
 
             Solution solution = solver.findOptimalSolution(totalPopularity, Model.MAXIMIZE);
 
