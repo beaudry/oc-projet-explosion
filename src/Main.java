@@ -16,6 +16,7 @@ public class Main {
     private static final String PARAMETER_SEPARATOR = " ";
     private static final int LINE_NUMBER_TEAMS_START = 1;
     private static final int TEAMS_PER_MATCH = 3;
+    private static final int MAX_TEAM_POPULARITY = 5;
 
     static class Team {
         final int id;
@@ -128,11 +129,11 @@ public class Main {
                 model.allDifferent(flatCalendarSegment).post();
             }
 
-            // TODO: On optimise les matchs pour la télé et le live
+            // On optimise les matchs pour la télé et le live
 
-            IntVar[] popularityDifferencePerDay = model.intVarArray(matches.length / MATCHES_PER_DAY, 0, 1200);
-            IntVar[][] matchTvPopularity = model.intVarMatrix(matches.length / MATCHES_PER_DAY, MATCHES_PER_DAY, 0, 300);
-            IntVar[][] matchLivePopularity = model.intVarMatrix(matches.length / MATCHES_PER_DAY, MATCHES_PER_DAY, 0, 300);
+            IntVar[] popularityDifferencePerDay = model.intVarArray(matches.length / MATCHES_PER_DAY, 0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH*MATCHES_PER_DAY*2);
+            IntVar[][] matchTvPopularity = model.intVarMatrix(matches.length / MATCHES_PER_DAY, MATCHES_PER_DAY, 0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH);
+            IntVar[][] matchLivePopularity = model.intVarMatrix(matches.length / MATCHES_PER_DAY, MATCHES_PER_DAY, 0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH);
 
             Tuples tvPopularitiesTuples = new Tuples();
             Tuples livePopularitiesTuples = new Tuples();
@@ -150,15 +151,14 @@ public class Main {
 
             for (int i = 0; i < calendar.length; i++) {
                 for (int j = 0; j < calendar[i].length; j++) {
-                    //model.arithm(tvPopularities[2], "=", matchTvPopularity[i][j]).post();
                     model.sum(calendar[i][j].getTvPopularities(), "=", matchTvPopularity[i][j]).post();
                     model.sum(calendar[i][j].getLivePopularities(), "=", matchLivePopularity[i][j]).post();
                 }
 
-                IntVar maxTvPopularity = model.intVar(0, 300);
-                model.max(maxTvPopularity, matchTvPopularity[i]);
-                IntVar totalTvPopularityDifferences = model.intVar(0, 600);
-                IntVar[] TvPopularityDifferences = model.intVarArray(TEAMS_PER_MATCH, 0, 300);
+                IntVar maxTvPopularity = model.intVar(0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH);
+                model.max(maxTvPopularity, matchTvPopularity[i]).post();
+                IntVar totalTvPopularityDifferences = model.intVar(0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH*MATCHES_PER_DAY);
+                IntVar[] TvPopularityDifferences = model.intVarArray(MATCHES_PER_DAY, 0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH);
 
                 for (int m = 0; m < MATCHES_PER_DAY; m++) {
                     model.arithm(maxTvPopularity, "-", matchTvPopularity[i][m], "=", TvPopularityDifferences[m]).post();
@@ -166,10 +166,10 @@ public class Main {
 
                 model.sum(TvPopularityDifferences, "=", totalTvPopularityDifferences).post();
 
-                IntVar maxLivePopularity = model.intVar(0, 300);
-                model.max(maxLivePopularity, matchLivePopularity[i]);
-                IntVar totalLivePopularityDifferences = model.intVar(0, 600);
-                IntVar[] LivePopularityDifferences = model.intVarArray(TEAMS_PER_MATCH, 0, 300);
+                IntVar maxLivePopularity = model.intVar(0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH);
+                model.max(maxLivePopularity, matchLivePopularity[i]).post();
+                IntVar totalLivePopularityDifferences = model.intVar(0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH*MATCHES_PER_DAY);
+                IntVar[] LivePopularityDifferences = model.intVarArray(MATCHES_PER_DAY, 0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH);
 
                 for (int m = 0; m < MATCHES_PER_DAY; m++) {
                     model.arithm(maxLivePopularity, "-", matchLivePopularity[i][m], "=", LivePopularityDifferences[m]).post();
@@ -180,9 +180,8 @@ public class Main {
                 model.arithm(totalTvPopularityDifferences, "+", totalLivePopularityDifferences, "=",popularityDifferencePerDay[i]).post();
             }
 
-            IntVar totalPopularityDifference = model.intVar("Différence de popularité totale", 0, 10000);
-            //model.sum(popularityDifferencePerDay, "=", totalPopularityDifference).post();
-            model.arithm(matchTvPopularity[0][0], "=", totalPopularityDifference).post();
+            IntVar totalPopularityDifference = model.intVar("Différence de popularité totale", 0, MAX_TEAM_POPULARITY*TEAMS_PER_MATCH*MATCHES_PER_DAY*2*calendar.length);
+            model.sum(popularityDifferencePerDay, "=", totalPopularityDifference).post();
 
             IntVar[] allVariables = Arrays.stream(matches).flatMap(match -> Arrays.stream(match.variables).flatMap(Arrays::stream)).toArray(IntVar[]::new);
 
@@ -192,7 +191,6 @@ public class Main {
             solver.setGeometricalRestart(2, 2.1, new FailCounter(model, 2), 25000);
 
             Solution solution = solver.findOptimalSolution(totalPopularityDifference, model.MAXIMIZE);
-            //Solution optimalSolution = solver.findOptimalSolution(totalLoss, Model.MINIMIZE);
 
             if (solution != null) {
                 for (Match dayMatches[] : calendar) {
