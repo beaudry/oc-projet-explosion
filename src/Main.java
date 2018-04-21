@@ -3,7 +3,7 @@ import org.chocosolver.solver.Solution;
 import org.chocosolver.solver.Solver;
 import org.chocosolver.solver.constraints.Constraint;
 import org.chocosolver.solver.constraints.extension.Tuples;
-import org.chocosolver.solver.search.strategy.Search;
+import org.chocosolver.solver.search.strategy.selectors.variables.ImpactBased;
 import org.chocosolver.solver.variables.IntVar;
 
 import java.nio.file.Files;
@@ -120,6 +120,15 @@ class Main {
                 }
             }
 
+            // Bris de symétrie
+            for (int i = 0; i < calendar.length - 1; i++) {
+                for (int j = 0; j < calendar[i].length; j++) {
+                    for (int k = 0; k < TEAMS_PER_MATCH; k++) {
+                        model.arithm(calendar[i][j].getTeamIds()[k], "<=", calendar[i + 1][j].getTeamIds()[k]).post();
+                    }
+                }
+            }
+
             // Chaque équipe joue le même nombre de match
             IntVar sameTeamLimit = model.intVar(MATCHES_PLAYED_BY_EACH_TEAM);
             IntVar[] matchesTeamsIds = Arrays.stream(matches).flatMap(match -> Arrays.stream(match.getTeamIds())).toArray(IntVar[]::new);
@@ -170,7 +179,7 @@ class Main {
 
             Solver solver = model.getSolver();
             // TODO: Regarder voir si on peut trouver une meilleure façon de faire de la recherche (activityBasedSearch ou autre)
-            solver.setSearch(Search.activityBasedSearch(allVariables.toArray(new IntVar[0])));
+            solver.setSearch(new ImpactBased(allVariables.toArray(new IntVar[0]), true));
 
             Solution solution = solver.findOptimalSolution(totalPopularity, Model.MAXIMIZE);
 
