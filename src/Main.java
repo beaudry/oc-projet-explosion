@@ -23,6 +23,7 @@ class Main {
     private static final int MAX_MATCH_POPULARITY = MAX_TEAM_POPULARITY * TEAMS_PER_MATCH;
     private static final int TV_MATCH_INDEX = 0;
     private static final int LIVE_MATCH_INDEX = 1;
+    private static final int UNSEEN_MATCH_INDEX = 2;
 
     static class Team {
         final int id;
@@ -70,6 +71,10 @@ class Main {
             int DAYS_BETWEEN_MATCHES = Integer.valueOf(parameters[2]);
 
             Team[] teams = new Team[lines.size() - 1];
+            if (teams.length % TEAMS_PER_MATCH > 0) {
+                throw new IllegalArgumentException(String.format("Il faut que le nombre d'équipes soit un multiple de %s", TEAMS_PER_MATCH));
+            }
+
             String[] teamParameters;
 
             for (int lineNumber = LINE_NUMBER_TEAMS_START; lineNumber < lines.size(); lineNumber++) {
@@ -121,13 +126,7 @@ class Main {
             }
 
             // Bris de symétrie
-            for (int i = 0; i < calendar.length - 1; i++) {
-                for (int j = 0; j < calendar[i].length; j++) {
-                    for (int k = 0; k < TEAMS_PER_MATCH; k++) {
-                        model.arithm(calendar[i][j].getTeamIds()[k], "<=", calendar[i + 1][j].getTeamIds()[k]).post();
-                    }
-                }
-            }
+            model.arithm(calendar[0][0].getTeamIds()[0], "<=", calendar[calendar.length - 1][0].getTeamIds()[0]).post();
 
             // Chaque équipe joue le même nombre de match
             IntVar sameTeamLimit = model.intVar(MATCHES_PLAYED_BY_EACH_TEAM);
@@ -179,7 +178,10 @@ class Main {
 
             Solver solver = model.getSolver();
             // TODO: Regarder voir si on peut trouver une meilleure façon de faire de la recherche (activityBasedSearch ou autre)
-            solver.setSearch(new ImpactBased(allVariables.toArray(new IntVar[0]), true));
+            solver.setSearch(new ImpactBased(allVariables.toArray(new IntVar[0]), false));
+//            solver.setGeometricalRestart(2, 3.1, new FailCounter(model, 10), 25000);
+//            solver.setLubyRestart(2, new FailCounter(model, 2), 25000);
+            solver.limitTime("120s");
 
             Solution solution = solver.findOptimalSolution(totalPopularity, Model.MAXIMIZE);
 
