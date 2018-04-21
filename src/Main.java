@@ -23,7 +23,6 @@ class Main {
     private static final int MAX_MATCH_POPULARITY = MAX_TEAM_POPULARITY * TEAMS_PER_MATCH;
     private static final int TV_MATCH_INDEX = 0;
     private static final int LIVE_MATCH_INDEX = 1;
-    private static final int UNSEEN_MATCH_INDEX = 2;
 
     static class Team {
         final int id;
@@ -71,8 +70,8 @@ class Main {
             int DAYS_BETWEEN_MATCHES = Integer.valueOf(parameters[2]);
 
             Team[] teams = new Team[lines.size() - 1];
-            if (teams.length % TEAMS_PER_MATCH > 0) {
-                throw new IllegalArgumentException(String.format("Il faut que le nombre d'équipes soit un multiple de %s", TEAMS_PER_MATCH));
+            if (MATCHES_PLAYED_BY_EACH_TEAM * teams.length % (TEAMS_PER_MATCH * MATCHES_PER_DAY) > 0) {
+                throw new IllegalArgumentException("Mauvais nombre d'équipes.");
             }
 
             String[] teamParameters;
@@ -179,8 +178,6 @@ class Main {
             Solver solver = model.getSolver();
             // TODO: Regarder voir si on peut trouver une meilleure façon de faire de la recherche (activityBasedSearch ou autre)
             solver.setSearch(new ImpactBased(allVariables.toArray(new IntVar[0]), false));
-//            solver.setGeometricalRestart(2, 3.1, new FailCounter(model, 10), 25000);
-//            solver.setLubyRestart(2, new FailCounter(model, 2), 25000);
             solver.limitTime("120s");
 
             Solution solution = solver.findOptimalSolution(totalPopularity, Model.MAXIMIZE);
