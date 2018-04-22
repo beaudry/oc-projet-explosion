@@ -23,6 +23,7 @@ class Main {
     private static final int MAX_MATCH_POPULARITY = MAX_TEAM_POPULARITY * TEAMS_PER_MATCH;
     private static final int TV_MATCH_INDEX = 0;
     private static final int LIVE_MATCH_INDEX = 1;
+    private static final int GYM_MATCHES_INDEX = 2;
 
     static class Team {
         final int id;
@@ -106,21 +107,20 @@ class Main {
                 System.arraycopy(matches, dayNumber * calendar[dayNumber].length, calendar[dayNumber], 0, calendar[dayNumber].length);
             }
 
-            // Avoir des équipes différentes à chaque match (et triées)
-            for (Match match : matches) {
+            for (int i = 0; i < matches.length; i++) {
+                Match match = matches[i];
                 for (int teamNumber = 0; teamNumber < match.getTeamIds().length - 1; teamNumber++) {
                     model.arithm(match.getTeamIds()[teamNumber], "<", match.getTeamIds()[teamNumber + 1]).post();
                 }
-                model.sort(match.getTeamIds(), match.getTeamIds()).post();
 
-                for (Match otherMatch : matches) {
-                    if (match != otherMatch) {
-                        Constraint[] differents = new Constraint[match.getTeamIds().length];
-                        for (int teamIndex = 0; teamIndex < match.getTeamIds().length; teamIndex++) {
-                            differents[teamIndex] = model.allDifferent(match.getTeamIds()[teamIndex], otherMatch.getTeamIds()[teamIndex]);
-                        }
-                        model.or(differents).post();
+                for (int j = i + 1; j < matches.length; j++) {
+                    Match otherMatch = matches[j];
+
+                    Constraint[] differents = new Constraint[match.getTeamIds().length];
+                    for (int teamIndex = 0; teamIndex < match.getTeamIds().length; teamIndex++) {
+                        differents[teamIndex] = model.allDifferent(match.getTeamIds()[teamIndex], otherMatch.getTeamIds()[teamIndex]);
                     }
+                    model.or(differents).post();
                 }
             }
 
@@ -176,7 +176,6 @@ class Main {
             model.arithm(totalLivePopularity, "+", totalTvPopularity, "=", totalPopularity).post();
 
             Solver solver = model.getSolver();
-            // TODO: Regarder voir si on peut trouver une meilleure façon de faire de la recherche (activityBasedSearch ou autre)
             solver.setSearch(new ImpactBased(allVariables.toArray(new IntVar[0]), false));
             solver.limitTime("120s");
 
