@@ -194,7 +194,6 @@ class Main {
                     }
                 }
 
-
                 System.out.println();
 
                 for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
