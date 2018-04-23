@@ -24,6 +24,7 @@ class Main {
     private static final int TV_MATCH_INDEX = 0;
     private static final int LIVE_MATCH_INDEX = 1;
     private static final int GYM_MATCHES_INDEX = 2;
+    private static final String MATCHES_LOCATION[] = {"Télévision", "Stade", "Gymnase"};
 
     static class Team {
         final int id;
@@ -68,7 +69,7 @@ class Main {
             String[] parameters = lines.get(0).split(" ");
             int MATCHES_PLAYED_BY_EACH_TEAM = Integer.valueOf(parameters[0]);
             int MATCHES_PER_DAY = Integer.valueOf(parameters[1]);
-            int DAYS_BETWEEN_MATCHES = Integer.valueOf(parameters[2]);
+            int DAYS_BETWEEN_MATCHES = Integer.valueOf(parameters[2]) + 1;
 
             Team[] teams = new Team[lines.size() - 1];
             if (MATCHES_PLAYED_BY_EACH_TEAM * teams.length % (TEAMS_PER_MATCH * MATCHES_PER_DAY) > 0) {
@@ -83,8 +84,8 @@ class Main {
 
                 teams[teamIndex] = new Team(
                         teamIndex + 1,
-                        Integer.valueOf(teamParameters[0]),
-                        Integer.valueOf(teamParameters[1])
+                        Integer.valueOf(teamParameters[TV_MATCH_INDEX]),
+                        Integer.valueOf(teamParameters[LIVE_MATCH_INDEX])
                 );
             }
 
@@ -182,12 +183,9 @@ class Main {
             Solution solution = solver.findOptimalSolution(totalPopularity, Model.MAXIMIZE);
 
             if (solution != null) {
-                System.out.printf("Popularité télé: %s\n", solution.getIntVal(totalTvPopularity));
-                System.out.printf("Popularité live: %s\n\n", solution.getIntVal(totalLivePopularity));
-
                 for (Match dayMatches[] : calendar) {
                     for (Match match : dayMatches) {
-                        System.out.printf("Match #%s (%s) - TV: %s, Live: %s \n",
+                        System.out.printf("Match #%s (%s) - TV: %s, Stade: %s \n",
                                 match.id,
                                 String.join(" vs ", Arrays.stream(match.getTeamIds()).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)),
                                 Arrays.stream(match.getTvPopularities()).mapToInt(solution::getIntVal).sum(),
@@ -196,18 +194,22 @@ class Main {
                     }
                 }
 
+
                 System.out.println();
 
                 for (int dayNumber = 0; dayNumber < calendar.length; dayNumber++) {
                     System.out.printf("Jour %d: ", dayNumber + 1);
-                    for (Match match : calendar[dayNumber]) {
-                        System.out.printf("Match #%s (%s), ", match.id, String.join(" vs ", Arrays.stream(match.getTeamIds()).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
+                    for (int i = 0; i < calendar[dayNumber].length; i++) {
+                        Match match = calendar[dayNumber][i];
+                        System.out.printf("Match #%s – %s – (%s), ", match.id, MATCHES_LOCATION[Math.min(i, GYM_MATCHES_INDEX)], String.join(" vs ", Arrays.stream(match.getTeamIds()).map(teamId -> String.valueOf(solution.getIntVal(teamId))).toArray(String[]::new)));
                     }
 
                     System.out.println();
                 }
 
-                System.out.printf("\nPopularité de l'horaire: %s\n", solution.getIntVal(totalPopularity));
+                System.out.printf("\nPopularité télé: %s\n", solution.getIntVal(totalTvPopularity));
+                System.out.printf("Popularité stade: %s\n\n", solution.getIntVal(totalLivePopularity));
+                System.out.printf("Popularité totale l'horaire: %s\n", solution.getIntVal(totalPopularity));
             }
 
             System.out.println();
