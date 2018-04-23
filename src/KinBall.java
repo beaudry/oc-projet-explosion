@@ -13,7 +13,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-class Main {
+class KinBall {
     private static final String PARAMETER_SEPARATOR = " ";
     private static final int LINE_NUMBER_TEAMS_START = 1;
     private static final int TEAMS_PER_MATCH = 3;
